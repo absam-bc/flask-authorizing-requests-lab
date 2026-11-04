@@ -18,30 +18,41 @@ db.init_app(app)
 
 api = Api(app)
 
+
 class ClearSession(Resource):
 
     def delete(self):
-    
         session['page_views'] = None
         session['user_id'] = None
 
         return {}, 204
 
+
 class IndexArticle(Resource):
-    
+
     def get(self):
-        articles = [ArticleSchema().dump(article) for article in Article.query.all()]
+        articles = [
+            ArticleSchema().dump(article)
+            for article in Article.query.all()
+        ]
         return make_response(articles, 200)
+
 
 class ShowArticle(Resource):
 
     def get(self, id):
-
         article = Article.query.filter(Article.id == id).first()
+
+        if not article:
+            return {'message': 'Article not found'}, 404
+
         article_json = ArticleSchema().dump(article)
 
         if not session.get('user_id'):
-            session['page_views'] = 0 if not session.get('page_views') else session.get('page_views')
+            session['page_views'] = (
+                0 if not session.get('page_views')
+                else session.get('page_views')
+            )
             session['page_views'] += 1
 
             if session['page_views'] <= 3:
@@ -51,48 +62,74 @@ class ShowArticle(Resource):
 
         return article_json, 200
 
+
 class Login(Resource):
 
     def post(self):
-        
         username = request.get_json().get('username')
         user = User.query.filter(User.username == username).first()
 
         if user:
-        
             session['user_id'] = user.id
             return UserSchema().dump(user), 200
 
         return {}, 401
 
+
 class Logout(Resource):
 
     def delete(self):
-
         session['user_id'] = None
-        
         return {}, 204
+
 
 class CheckSession(Resource):
 
     def get(self):
-        
-        user_id = session['user_id']
+        user_id = session.get('user_id')
+
         if user_id:
             user = User.query.filter(User.id == user_id).first()
-            return UserSchema().dump(user), 200
-        
+
+            if user:
+                return UserSchema().dump(user), 200
+
         return {}, 401
 
+
 class MemberOnlyIndex(Resource):
-    
+
     def get(self):
-        pass
+        if not session.get('user_id'):
+            return {'message': 'Please log in'}, 401
+
+        articles = Article.query.filter(
+            Article.is_member_only == True
+        ).all()
+
+        articles_json = [
+            ArticleSchema().dump(article)
+            for article in articles
+        ]
+
+        return articles_json, 200
+
 
 class MemberOnlyArticle(Resource):
-    
+
     def get(self, id):
-        pass
+        if not session.get('user_id'):
+            return {'message': 'Please log in'}, 401
+
+        article = Article.query.filter(
+            Article.id == id
+        ).first()
+
+        if not article:
+            return {'message': 'Article not found'}, 404
+
+        return ArticleSchema().dump(article), 200
+
 
 api.add_resource(ClearSession, '/clear', endpoint='clear')
 api.add_resource(IndexArticle, '/articles', endpoint='article_list')
